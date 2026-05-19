@@ -1,0 +1,38 @@
+# Global Network Quality Test
+
+A simple one-click network quality testing script for VPS and international routes.
+
+## Features
+
+* Ping test
+* MTR route analysis
+* Traceroute
+* TCP bandwidth test
+* UDP jitter/loss test
+* HTTP real-world speed test
+* Loop mode for peak-hour monitoring
+
+## Install
+
+```bash
+curl -O https://raw.githubusercontent.com/YOURNAME/nettest/main/nettest.sh
+chmod +x nettest.sh
+```
+
+## Server Mode
+
+```bash
+./nettest.sh server
+```
+
+## Client Mode
+
+```bash
+./nettest.sh client IP
+```
+
+## Loop Monitoring
+
+```bash
+./nettest.sh loop IP
+```
