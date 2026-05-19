@@ -15,7 +15,7 @@ A simple one-click network quality testing script for VPS and international rout
 ## Install
 
 ```bash
-curl -O https://raw.githubusercontent.com/YOURNAME/nettest/main/nettest.sh
+curl -fL -o nettest.sh https://raw.githubusercontent.com/pairmeng/nettest/main/nettest.sh
 chmod +x nettest.sh
 ```
 
