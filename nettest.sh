@@ -25,6 +25,8 @@ readonly UDP_BANDWIDTH="${UDP_BANDWIDTH:-100M}"
 readonly HTTP_BYTES="${HTTP_BYTES:-100000000}"
 readonly HTTP_TEST_URL="${HTTP_TEST_URL:-https://speed.cloudflare.com/__down?bytes=${HTTP_BYTES}}"
 readonly LOOP_SLEEP_SECONDS="${LOOP_SLEEP_SECONDS:-1800}"
+IPERF_SERVER="${IPERF_SERVER:-}"
+IPERF_PORT="${IPERF_PORT:-5201}"
 
 MODE="${1:-}"
 TARGET="${2:-}"
@@ -63,6 +65,8 @@ Optional overrides:
   HTTP_BYTES=100000000
   LOOP_SLEEP_SECONDS=1800
   HTTP_TEST_URL=https://...
+  IPERF_SERVER=<host>
+  IPERF_PORT=5201
 EOF
 }
 
@@ -88,6 +92,10 @@ run_as_root() {
         exit 1
     fi
 }
+
+SKIPPED_TESTS=()
+FAILED_TESTS=()
+PASSED_TESTS=()
 
 install_deps() {
     local missing=()
@@ -155,12 +163,33 @@ run_test() {
     print_info "$title"
 
     if "$@" 2>&1 | tee "$log_file"; then
+        PASSED_TESTS+=("$title")
         return 0
     fi
 
     local status=${PIPESTATUS[0]}
-    print_error "$title failed with exit code $status"
-    return "$status"
+    FAILED_TESTS+=("$title")
+    print_warn "$title failed with exit code $status (continuing)"
+    return 0
+}
+
+skip_test() {
+    local title="$1"
+    local reason="$2"
+
+    SKIPPED_TESTS+=("$title")
+    print_warn "$title skipped: $reason"
+}
+
+port_is_open() {
+    local host="$1"
+    local port="$2"
+
+    if have_cmd timeout; then
+        timeout 3 bash -c ':</dev/tcp/"$1"/"$2"' _ "$host" "$port" >/dev/null 2>&1
+    else
+        bash -c ':</dev/tcp/"$1"/"$2"' _ "$host" "$port" >/dev/null 2>&1
+    fi
 }
 
 server_mode() {
@@ -215,19 +244,33 @@ mtr_test() {
 tcp_test() {
     local run_ts="$1"
 
+    if ! port_is_open "$IPERF_SERVER" "$IPERF_PORT"; then
+        skip_test \
+            "Running TCP Bandwidth Test..." \
+            "iperf3 server not reachable at ${IPERF_SERVER}:${IPERF_PORT}"
+        return 0
+    fi
+
     run_test \
         "Running TCP Bandwidth Test..." \
         "$LOG_DIR/tcp_${run_ts}.log" \
-        iperf3 -c "$TARGET" -P "$TCP_STREAMS"
+        iperf3 -c "$IPERF_SERVER" -p "$IPERF_PORT" -P "$TCP_STREAMS"
 }
 
 udp_test() {
     local run_ts="$1"
 
+    if ! port_is_open "$IPERF_SERVER" "$IPERF_PORT"; then
+        skip_test \
+            "Running UDP Quality Test..." \
+            "iperf3 server not reachable at ${IPERF_SERVER}:${IPERF_PORT}"
+        return 0
+    fi
+
     run_test \
         "Running UDP Quality Test..." \
         "$LOG_DIR/udp_${run_ts}.log" \
-        iperf3 -c "$TARGET" -u -b "$UDP_BANDWIDTH"
+        iperf3 -c "$IPERF_SERVER" -p "$IPERF_PORT" -u -b "$UDP_BANDWIDTH"
 }
 
 http_test() {
@@ -246,6 +289,10 @@ client_mode() {
     local run_ts
 
     require_target
+
+    if [[ -z "$IPERF_SERVER" ]]; then
+        IPERF_SERVER="$TARGET"
+    fi
 
     run_ts="$(date +"%Y%m%d_%H%M%S")"
 
@@ -273,6 +320,22 @@ client_mode() {
 
     print_info "All tests completed"
     print_info "Logs saved in: $LOG_DIR"
+}
+
+print_summary() {
+    echo
+    print_info "Summary"
+    print_info "Passed: ${#PASSED_TESTS[@]}"
+    print_warn "Failed: ${#FAILED_TESTS[@]}"
+    print_warn "Skipped: ${#SKIPPED_TESTS[@]}"
+
+    if ((${#FAILED_TESTS[@]} > 0)); then
+        print_warn "Failed tests: ${FAILED_TESTS[*]}"
+    fi
+
+    if ((${#SKIPPED_TESTS[@]} > 0)); then
+        print_warn "Skipped tests: ${SKIPPED_TESTS[*]}"
+    fi
 }
 
 loop_mode() {
@@ -307,3 +370,5 @@ case "$MODE" in
         exit 1
         ;;
 esac
+
+print_summary

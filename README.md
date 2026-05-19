@@ -31,6 +31,13 @@ chmod +x nettest.sh
 ./nettest.sh client IP
 ```
 
+TCP and UDP bandwidth tests require `iperf3` running on the target host.
+If the remote `iperf3` service listens on another host or port, set:
+
+```bash
+IPERF_SERVER=HOST IPERF_PORT=5201 ./nettest.sh client IP
+```
+
 ## Loop Monitoring
 
 ```bash
